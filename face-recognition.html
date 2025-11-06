@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Real-Time Face Recognition — Demo</title>
+  <!-- face-api.js from CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+  <style>
+    :root{
+      --bg1:#091826;
+      --bg2:#2a6f97;
+      --accent1:#ff7a7a;
+      --accent2:#ffd66b;
+      --glass: rgba(255,255,255,0.06);
+      --glass-strong: rgba(255,255,255,0.09);
+      --text: #e9f6ff;
+      --muted: rgba(233,246,255,0.68);
+      --shadow: 0 8px 30px rgba(2,6,23,0.6);
+      --radius:14px;
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color:var(--text);
+      background: linear-gradient(135deg,var(--bg1) 0%, #08344e 30%, #07384f 60%, #071b2a 100%);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    .container{
+      max-width:1100px;
+      margin:28px auto;
+      padding:22px;
+      display:grid;
+      grid-template-columns: 1fr 360px;
+      gap:20px;
+      align-items:start;
+    }
+
+    /* card */
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:var(--radius);
+      padding:16px;
+      box-shadow:var(--shadow);
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    /* left: video area */
+    .video-area{
+      position:relative;
+      min-height:420px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      border-radius:12px;
+    }
+
+    video#inputVideo{
+      width:100%;
+      height:auto;
+      max-height:75vh;
+      border-radius:10px;
+      background:#000;
+      display:block;
+    }
+
+    canvas#overlay{
+      position:absolute;
+      left:0;
+      top:0;
+      /* canvas sized in JS to match video */
+      pointer-events:none;
+    }
+
+    /* right: controls */
+    .controls{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    h1{
+      margin:0 0 6px 0;
+      font-size:20px;
+      letter-spacing:0.2px;
+    }
+    p.lead{
+      margin:0 0 10px 0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    /* buttons */
+    .controls-row{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    button.btn{
+      padding:10px 12px;
+      border-radius:10px;
+      border:0;
+      cursor:pointer;
+      font-weight:600;
+      box-shadow:none;
+    }
+    button.primary{
+      background: linear-gradient(90deg,var(--accent1), var(--accent2));
+      color:#072026;
+    }
+    button.ghost{
+      background:var(--glass);
+      color:var(--text);
+      border:1px solid rgba(255,255,255,0.04);
+    }
+    .small{
+      padding:8px 10px;
+      font-size:13px;
+    }
+
+    .status{
+      font-size:13px;
+      color:var(--muted);
+      margin-top:6px;
+    }
+
+    .panel{
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+      padding:12px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.03);
+    }
+
+    .metrics{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    .metric-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .toggle{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+
+    label.switch{
+      position:relative;
+      display:inline-block;
+      width:46px;
+      height:26px;
+    }
+    label.switch input{display:none;}
+    label.switch .slider{
+      position:absolute;
+      cursor:pointer;
+      top:0; left:0; right:0; bottom:0;
+      background:rgba(0,0,0,0.16);
+      border-radius:999px;
+      transition:0.2s;
+      border:1px solid rgba(255,255,255,0.03);
+    }
+    label.switch .slider:before{
+      content:"";
+      position:absolute;
+      height:20px;
+      width:20px;
+      left:3px;
+      top:3px;
+      background:#fff;
+      border-radius:50%;
+      transition:0.2s;
+      transform:translateX(0);
+    }
+    label.switch input:checked + .slider{
+      background:linear-gradient(90deg,var(--accent1),var(--accent2));
+    }
+    label.switch input:checked + .slider:before{
+      transform:translateX(20px);
+    }
+
+    /* capture preview */
+    .preview{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      margin-top:8px;
+    }
+    .preview img{
+      width:98px;
+      height:98px;
+      object-fit:cover;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.04);
+    }
+
+    footer.small-note{
+      grid-column:1/-1;
+      text-align:center;
+      color:var(--muted);
+      font-size:12px;
+      margin-top:12px;
+    }
+
+    /* responsive */
+    @media (max-width:980px){
+      .container{grid-template-columns: 1fr; padding:14px;}
+      .controls{order:2;}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card video-area" id="videoCard">
+      <div style="position:absolute;left:14px;top:14px;z-index:30;">
+        <div style="background:linear-gradient(90deg,var(--bg2), #031e2a);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)">
+          <strong id="detectorStatus">Models: Loading…</strong>
+          <div style="font-size:12px;color:var(--muted)">Detector: <span id="detectorMode">tiny (default)</span></div>
+        </div>
+      </div>
+
+      <video id="inputVideo" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <aside class="card controls">
+      <div>
+        <h1>Face Recognition Studio</h1>
+        <p class="lead">Real-time detection • landmarks • expressions • capture & download</p>
+      </div>
+
+      <div class="controls-row">
+        <button id="startBtn" class="btn primary">Start Camera</button>
+        <button id="stopBtn" class="btn ghost small">Stop Camera</button>
+        <button id="captureBtn" class="btn ghost small">Capture Face</button>
+      </div>
+
+      <div class="panel" style="margin-top:8px;">
+        <div class="metrics">
+          <div class="metric-row"><div>Detections</div><div id="facesCount">0</div></div>
+          <div class="metric-row"><div>FPS</div><div id="fps">0</div></div>
+          <div class="metric-row"><div>Last detection</div><div id="lastDet">—</div></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:700">Overlays</div>
+          <div style="font-size:12px;color:var(--muted)">Toggle landmarks & expressions</div>
+        </div>
+
+        <div class="toggle" style="justify-content:space-between">
+          <div style="display:flex;gap:8px;align-items:center">
+            <label class="switch"><input id="showLandmarks" type="checkbox" checked><span class="slider"></span></label>
+            <div style="font-size:13px">Landmarks</div>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center">
+            <label class="switch"><input id="showExpressions" type="checkbox" checked><span class="slider"></span></label>
+            <div style="font-size:13px">Expressions</div>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:space-between">
+          <div style="font-size:13px">Detector quality</div>
+          <select id="detectorQuality" style="background:transparent;border:1px solid rgba(255,255,255,0.04);padding:6px;border-radius:8px;color:var(--text)">
+            <option value="320">320 (fast)</option>
+            <option value="416" selected>416 (balanced)</option>
+            <option value="512">512 (accurate)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:8px;">
+        <div style="font-weight:700;margin-bottom:8px">Last Capture</div>
+        <div class="preview" id="capturePreview">
+          <img id="lastCapture" alt="No capture yet" src="" style="display:none">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <a id="downloadLink" class="btn primary small" href="#" download="capture.png" style="display:none">Download</a>
+            <button id="openCapture" class="btn ghost small" style="display:none">Open</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:8px" class="panel">
+        <div style="font-weight:700;margin-bottom:6px">Notes</div>
+        <div style="font-size:13px;color:var(--muted)">
+          Works offline if you host the models locally in a <code>/models</code> folder next to this file.
+          If you see "Models: Loaded" then you're good to go.
+        </div>
+      </div>
+    </aside>
+
+    <footer class="small-note">Built with <strong>face-api.js</strong> • Make sure to place the <code>models/</code> folder next to this HTML file.</footer>
+  </div>
+
+  <script>
+    // --- configuration ---
+    const MODEL_URL = './models' // put the official face-api.js model files here
+    const video = document.getElementById('inputVideo')
+    const canvas = document.getElementById('overlay')
+    const ctx = canvas.getContext('2d')
+    const startBtn = document.getElementById('startBtn')
+    const stopBtn = document.getElementById('stopBtn')
+    const captureBtn = document.getElementById('captureBtn')
+    const facesCount = document.getElementById('facesCount')
+    const fpsDisplay = document.getElementById('fps')
+    const lastDetDisplay = document.getElementById('lastDet')
+    const detectorStatus = document.getElementById('detectorStatus')
+    const detectorMode = document.getElementById('detectorMode')
+    const showLandmarksCheckbox = document.getElementById('showLandmarks')
+    const showExpressionsCheckbox = document.getElementById('showExpressions')
+    const detectorQualitySelect = document.getElementById('detectorQuality')
+    const lastCaptureImg = document.getElementById('lastCapture')
+    const downloadLink = document.getElementById('downloadLink')
+    const openCaptureBtn = document.getElementById('openCapture')
+
+    let stream = null
+    let running = false
+    let detectionLoopHandle = null
+    let lastTime = performance.now()
+    let frameCount = 0
+    let lastFPSUpdate = performance.now()
+
+    // tiny detector options will be updated based on quality select
+    function getTinyOptions() {
+      const inputSize = parseInt(detectorQualitySelect.value || '416')
+      return new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: 0.45 })
+    }
+
+    async function loadModels(){
+      detectorStatus.textContent = 'Models: Loading…'
+      try {
+        // load minimal required models
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+        ])
+        detectorStatus.textContent = 'Models: Loaded'
+      } catch (e) {
+        detectorStatus.textContent = 'Models: Error (check /models)'
+        console.error('Model loading failed. Put model files in', MODEL_URL, e)
+        alert('Failed to load models. Make sure the /models folder exists and contains the face-api.js model files. See console for details.')
+      }
+    }
+
+    async function startCamera(){
+      if (running) return
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio:false })
+        video.srcObject = stream
+        await video.play()
+        running = true
+        startBtn.textContent = 'Camera Running'
+        startBtn.disabled = true
+        stopBtn.disabled = false
+        // resize canvas to video
+        resizeCanvas()
+        // start models if not loaded
+        if (!faceapi.nets.tinyFaceDetector.params) {
+          await loadModels()
+        }
+        // start detection
+        runDetectionLoop()
+      } catch (e) {
+        console.error('Camera start failed', e)
+        alert('Could not start camera: ' + e.message)
+      }
+    }
+
+    function stopCamera(){
+      if (!running) return
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop())
+      }
+      running = false
+      startBtn.textContent = 'Start Camera'
+      startBtn.disabled = false
+      stopBtn.disabled = true
+      // stop loop
+      if (detectionLoopHandle) {
+        cancelAnimationFrame(detectionLoopHandle)
+        detectionLoopHandle = null
+      }
+      // clear overlay
+      ctx.clearRect(0,0,canvas.width,canvas.height)
+      facesCount.textContent = '0'
+      fpsDisplay.textContent = '0'
+    }
+
+    function resizeCanvas(){
+      // match canvas to video size (maintaining aspect)
+      canvas.width = video.videoWidth || video.clientWidth || 640
+      canvas.height = video.videoHeight || video.clientHeight || 480
+      canvas.style.width = video.clientWidth + 'px'
+      canvas.style.height = video.clientHeight + 'px'
+    }
+
+    async function runDetectionLoop(){
+      // detection loop via requestAnimationFrame for smooth annotation
+      async function step(){
+        if (!running) return
+        if (video.readyState >= 2) { // enough data
+          resizeCanvas()
+          const t0 = performance.now()
+          const options = getTinyOptions()
+          try {
+            // detect all faces in current frame
+            const results = await faceapi.detectAllFaces(video, options)
+              .withFaceLandmarks()
+              .withFaceExpressions()
+
+            // clear canvas and draw
+            ctx.clearRect(0,0,canvas.width,canvas.height)
+            // scale factor between video natural size and displayed size
+            const sx = canvas.width / video.videoWidth
+            const sy = canvas.height / video.videoHeight
+
+            // update metrics
+            facesCount.textContent = results.length
+            lastDetDisplay.textContent = new Date().toLocaleTimeString()
+            // fps calculation
+            frameCount++
+            const now = performance.now()
+            if (now - lastFPSUpdate >= 500) {
+              const dt = now - lastFPSUpdate
+              const fps = Math.round( (frameCount) / (dt/1000) )
+              fpsDisplay.textContent = fps
+              frameCount = 0
+              lastFPSUpdate = now
+            }
+
+            for (const res of results) {
+              const box = res.detection.box
+              const score = res.detection.score
+              const x = box.x * sx
+              const y = box.y * sy
+              const w = box.width * sx
+              const h = box.height * sy
+
+              // draw rounded box
+              ctx.lineWidth = Math.max(2, Math.round(2 * (canvas.width/640)))
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'
+              roundRect(ctx, x-4, y-4, w+8, h+8, 8)
+              ctx.stroke()
+
+              // confidence badge
+              ctx.fillStyle = "rgba(3, 30, 40, 0.85)"
+              ctx.strokeStyle = "rgba(255,255,255,0.06)"
+              ctx.lineWidth = 1
+              ctx.fillRect(x-4, y-26, 140 * Math.min(1, score*1.5), 20)
+              ctx.strokeRect(x-4, y-26, 140 * Math.min(1, score*1.5), 20)
+
+              ctx.fillStyle = '#fff'
+              ctx.font = "13px Inter, system-ui, sans-serif"
+              ctx.fillText(`Confidence: ${(score*100).toFixed(1)}%`, x+6, y-12)
+
+              // expressions
+              if (showExpressionsCheckbox.checked && res.expressions) {
+                const sorted = Object.entries(res.expressions).sort((a,b)=>b[1]-a[1])
+                // show top 2 expressions
+                const ex1 = sorted[0]
+                const ex2 = sorted[1]
+                ctx.fillStyle = 'rgba(0,0,0,0.45)'
+                const labelText = `${ex1[0]} ${(ex1[1]*100).toFixed(0)}%` + (ex2? ` / ${ex2[0]} ${(ex2[1]*100).toFixed(0)}%` : '')
+                // label background
+                const tw = ctx.measureText(labelText).width + 18
+                ctx.fillRect(x-4, y+h+8, tw, 20)
+                ctx.fillStyle = '#fff'
+                ctx.fillText(labelText, x+6, y+h+22)
+              }
+
+              // landmarks
+              if (showLandmarksCheckbox.checked && res.landmarks) {
+                const pts = res.landmarks.positions
+                ctx.fillStyle = 'rgba(255,255,255,0.9)'
+                for (const p of pts) {
+                  const px = p.x * sx
+                  const py = p.y * sy
+                  ctx.beginPath()
+                  ctx.arc(px, py, 1.6, 0, Math.PI*2)
+                  ctx.fill()
+                }
+              }
+            }
+          } catch (err) {
+            // detection error; log but continue
+            // console.error('detect error', err)
+          }
+        }
+
+        detectionLoopHandle = requestAnimationFrame(step)
+      }
+      step()
+    }
+
+    // rounded rectangle helper
+    function roundRect(ctx,x,y,w,h,r){
+      if (w < 2*r) r = w/2
+      if (h < 2*r) r = h/2
+      ctx.beginPath()
+      ctx.moveTo(x+r,y)
+      ctx.arcTo(x+w,y,x+w,y+h,r)
+      ctx.arcTo(x+w,y+h,x,y+h,r)
+      ctx.arcTo(x,y+h,x,y,r)
+      ctx.arcTo(x,y,x+w,y,r)
+      ctx.closePath()
+    }
+
+    // face capture: crop first detected face from current frame
+    async function captureFace(){
+      if (!running) { alert('Start the camera first'); return }
+      try {
+        const options = getTinyOptions()
+        const result = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceExpressions()
+        if (!result) { alert('No face detected to capture'); return }
+
+        const box = result.detection.box
+        // create a temporary canvas matching video natural size
+        const tmp = document.createElement('canvas')
+        tmp.width = video.videoWidth
+        tmp.height = video.videoHeight
+        const tctx = tmp.getContext('2d')
+        tctx.drawImage(video, 0, 0, tmp.width, tmp.height)
+
+        // crop with a little padding
+        const pad = Math.round(Math.min(box.width, box.height) * 0.2)
+        const sx = Math.max(0, Math.round(box.x - pad))
+        const sy = Math.max(0, Math.round(box.y - pad))
+        const sw = Math.min(tmp.width - sx, Math.round(box.width + pad*2))
+        const sh = Math.min(tmp.height - sy, Math.round(box.height + pad*2))
+
+        const crop = document.createElement('canvas')
+        crop.width = sw
+        crop.height = sh
+        const cctx = crop.getContext('2d')
+        cctx.drawImage(tmp, sx, sy, sw, sh, 0, 0, sw, sh)
+
+        const dataUrl = crop.toDataURL('image/png')
+        lastCaptureImg.src = dataUrl
+        lastCaptureImg.style.display = 'block'
+        downloadLink.href = dataUrl
+        downloadLink.style.display = 'inline-block'
+        openCaptureBtn.style.display = 'inline-block'
+        downloadLink.setAttribute('download', `capture-${Date.now()}.png`)
+      } catch (e){
+        console.error('capture error', e)
+        alert('Failed to capture face.')
+      }
+    }
+
+    openCaptureBtn.addEventListener('click', ()=> {
+      if (lastCaptureImg.src) window.open(lastCaptureImg.src, '_blank')
+    })
+
+    // wire controls
+    startBtn.addEventListener('click', startCamera)
+    stopBtn.addEventListener('click', stopCamera)
+    captureBtn.addEventListener('click', captureFace)
+    stopBtn.disabled = true
+
+    // change detector quality
+    detectorQualitySelect.addEventListener('change', ()=>{
+      detectorMode.textContent = `tiny (input ${detectorQualitySelect.value})`
+    })
+
+    // init: try to load models (non-blocking) so UI updates faster
+    loadModels()
+  </script>
+</body>
+</html>
