@@ -420,9 +420,17 @@
           const options = getTinyOptions()
           try {
             // detect all faces in current frame
-            const results = await faceapi.detectAllFaces(video, options)
-              .withFaceLandmarks()
-              .withFaceExpressions()
+         // --- FIX FOR WINDOWS EXPRESSION DETECTION ---
+const hidden = document.getElementById('hiddenRGB');
+hidden.width = video.videoWidth;
+hidden.height = video.videoHeight;
+
+const hctx = hidden.getContext('2d');
+hctx.drawImage(video, 0, 0, hidden.width, hidden.height);
+
+const results = await faceapi.detectAllFaces(hidden, options)
+  .withFaceLandmarks()
+  .withFaceExpressions();
 
             // clear canvas and draw
             ctx.clearRect(0,0,canvas.width,canvas.height)
@@ -580,6 +588,7 @@
 
     // init: try to load models (non-blocking) so UI updates faster
     loadModels()
+    <canvas id="hiddenRGB" style="display:none;"></canvas>
   </script>
 </body>
 </html>
